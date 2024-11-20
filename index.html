@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GTA5 車輛調校工具</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        .param-section {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 10px;
+        }
+        .param-input {
+            padding: 5px;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+        }
+        .param-input label {
+            width: 120px;
+        }
+        input[type="number"] {
+            width: 100px;
+            padding: 3px;
+        }
+        input[type="checkbox"] {
+            margin-right: 5px;
+        }
+        .preview {
+            font-family: monospace;
+            white-space: pre-wrap;
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            border: 1px solid #dee2e6;
+            height: 800px;
+            overflow-y: auto;
+        }
+        .modified {
+            background-color: #fff3cd;
+        }
+        button {
+            padding: 10px;
+            margin: 5px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        .hint {
+            color: #6c757d;
+            font-size: 0.9em;
+            margin-left: 10px;
+        }
+        .file-controls {
+            margin-bottom: 15px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div>
+            <div class="file-controls">
+                <input type="file" id="fileInput" accept=".meta">
+                <button onclick="exportFile()">導出檔案</button>
+            </div>
+
+            <div class="param-section">
+                <h3>功能開關</h3>
+                <div class="param-input">
+                    <input type="checkbox" id="enableDownforce" onchange="updatePreview()">
+                    <label>下壓力</label>
+                    <input type="number" id="downforceValue" value="4.0" step="0.1" disabled>
+                </div>
+
+                <div class="param-input">
+                    <input type="checkbox" id="enableRocketBoost" onchange="updatePreview()">
+                    <label>火箭增壓</label>
+                    <input type="number" id="rocketBoostCapacity" value="1.0" step="0.1" disabled>
+                </div>
+
+                <div class="param-input">
+                    <input type="checkbox" id="enableBoostSpeed" onchange="updatePreview()">
+                    <label>最大增壓速度</label>
+                    <input type="number" id="boostMaxSpeed" value="75.0" step="0.1" disabled>
+                </div>
+            </div>
+
+            <div class="param-section">
+                <h3>基本參數</h3>
+                <div class="param-input">
+                    <label>車重</label>
+                    <input type="number" id="fMass" value="1500.0" step="0.1">
+                </div>
+
+                <div class="param-input">
+                    <label>最高速度</label>
+                    <input type="number" id="fInitialDriveMaxFlatVel" value="150.0" step="0.1">
+                </div>
+
+                <div class="param-input">
+                    <label>剎車力道</label>
+                    <input type="number" id="fBrakeForce" value="0.85" step="0.01">
+                </div>
+
+                <div class="param-input">
+                    <label>驅動方式</label>
+                    <input type="number" id="fDriveBiasFront" value="0.5" step="0.1">
+                    <span class="hint">1.0前驅 / 0.5四驅 / 0.0後驅</span>
+                </div>
+
+                <div class="param-input">
+                    <label>變速箱檔位</label>
+                    <input type="number" id="nInitialDriveGears" value="6" min="1" max="8" step="1">
+                    <span class="hint">一般4-6檔</span>
+                </div>
+            </div>
+
+            <div class="param-section">
+                <h3>懸吊系統</h3>
+                <div class="param-input">
+                    <label>懸吊上限</label>
+                    <input type="number" id="fSuspensionUpperLimit" value="0.1" step="0.01">
+                    <span class="hint">建議保持預設</span>
+                </div>
+
+                <div class="param-input">
+                    <label>懸吊下限</label>
+                    <input type="number" id="fSuspensionLowerLimit" value="-0.1" step="0.01">
+                    <span class="hint">建議保持預設</span>
+                </div>
+
+                <div class="param-input">
+                    <label>懸吊高度</label>
+                    <input type="number" id="fSuspensionRaise" value="0.0" step="0.01">
+                    <span class="hint">謹慎調整</span>
+                </div>
+
+                <div class="param-input">
+                    <label>前後懸吊平衡</label>
+                    <input type="number" id="fSuspensionBiasFront" value="0.1" step="0.01">
+                    <span class="hint">影響前傾度</span>
+                </div>
+
+                <div class="param-input">
+                    <label>最大抓地力</label>
+                    <input type="number" id="fTractionCurveMax" value="2.49" step="0.01">
+                </div>
+
+                <div class="param-input">
+                    <label>最小抓地力</label>
+                    <input type="number" id="fTractionCurveMin" value="2.25" step="0.01">
+                </div>
+            </div>
+        </div>
+
+        <div class="preview" id="preview"></div>
+    </div>
+
+    <script>
+        let originalContent = '';
+
+        const defaultValues = {
+            'fMass': 1500.0,
+            'fInitialDriveMaxFlatVel': 150.0,
+            'fBrakeForce': 0.85,
+            'fDriveBiasFront': 0.5,
+            'nInitialDriveGears': 6,
+            'fSuspensionUpperLimit': 0.1,
+            'fSuspensionLowerLimit': -0.1,
+            'fSuspensionRaise': 0.0,
+            'fSuspensionBiasFront': 0.1,
+            'fTractionCurveMax': 2.49,
+            'fTractionCurveMin': 2.25
+        };
+
+        // 更新預覽
+        function updatePreview() {
+            if (originalContent) {
+                let content = originalContent;
+
+                // 更新所有參數
+                Object.keys(defaultValues).forEach(param => {
+                    const value = document.getElementById(param).value;
+                    const regex = new RegExp(`<${param} value="[\\d.-]+"`, 'g');
+                    content = content.replace(regex, `<${param} value="${parseFloat(value).toFixed(6)}"`);
+                });
+
+                // 更新特殊功能參數
+                if (document.getElementById('enableDownforce').checked) {
+                    const value = document.getElementById('downforceValue').value;
+                    if (content.includes('fDownforceModifier')) {
+                        content = content.replace(/<fDownforceModifier value="[\d.]+"/,
+                            `<fDownforceModifier value="${parseFloat(value).toFixed(6)}"`);
+                    } else {
+                        content = content.replace(/\s*<handlingName/,
+                            `\n      <fDownforceModifier value="${parseFloat(value).toFixed(6)}" />\n      <handlingName`);
+                    }
+                } else {
+                    content = content.replace(/\s*<fDownforceModifier value="[\d.]+"[^>]*>\n?/g, '');
+                }
+
+                if (document.getElementById('enableRocketBoost').checked) {
+                    const value = document.getElementById('rocketBoostCapacity').value;
+                    if (content.includes('fRocketBoostCapacity')) {
+                        content = content.replace(/<fRocketBoostCapacity value="[\d.]+"/,
+                            `<fRocketBoostCapacity value="${parseFloat(value).toFixed(6)}"`);
+                    } else {
+                        content = content.replace(/\s*<handlingName/,
+                            `\n      <fRocketBoostCapacity value="${parseFloat(value).toFixed(6)}" />\n      <handlingName`);
+                    }
+                } else {
+                    content = content.replace(/\s*<fRocketBoostCapacity value="[\d.]+"[^>]*>\n?/g, '');
+                }
+
+                if (document.getElementById('enableBoostSpeed').checked) {
+                    const value = document.getElementById('boostMaxSpeed').value;
+                    if (content.includes('fBoostMaxSpeed')) {
+                        content = content.replace(/<fBoostMaxSpeed value="[\d.]+"/,
+                            `<fBoostMaxSpeed value="${parseFloat(value).toFixed(6)}"`);
+                    } else {
+                        content = content.replace(/\s*<handlingName/,
+                            `\n      <fBoostMaxSpeed value="${parseFloat(value).toFixed(6)}" />\n      <handlingName`);
+                    }
+                } else {
+                    content = content.replace(/\s*<fBoostMaxSpeed value="[\d.]+"[^>]*>\n?/g, '');
+                }
+
+                document.getElementById('preview').textContent = content;
+            } else {
+                // 如果沒有原始內容，只顯示修改的參數
+                let content = '';
+                
+                if (document.getElementById('enableDownforce').checked) {
+                    const value = document.getElementById('downforceValue').value;
+                    content += `      <fDownforceModifier value="${parseFloat(value).toFixed(6)}" />\n`;
+                }
+
+                if (document.getElementById('enableRocketBoost').checked) {
+                    const value = document.getElementById('rocketBoostCapacity').value;
+                    content += `      <fRocketBoostCapacity value="${parseFloat(value).toFixed(6)}" />\n`;
+                }
+
+                if (document.getElementById('enableBoostSpeed').checked) {
+                    const value = document.getElementById('boostMaxSpeed').value;
+                    content += `      <fBoostMaxSpeed value="${parseFloat(value).toFixed(6)}" />\n`;
+                }
+
+                Object.keys(defaultValues).forEach(param => {
+                    const value = document.getElementById(param).value;
+                    content += `      <${param} value="${parseFloat(value).toFixed(6)}" />\n`;
+                });
+
+                document.getElementById('preview').textContent = content;
+            }
+        }
+
+        // 特殊功能開關
+        ['enableDownforce', 'enableRocketBoost', 'enableBoostSpeed'].forEach(id => {
+            document.getElementById(id).addEventListener('change', function() {
+                const inputId = {
+                    'enableDownforce': 'downforceValue',
+                    'enableRocketBoost': 'rocketBoostCapacity',
+                    'enableBoostSpeed': 'boostMaxSpeed'
+                }[id];
+                document.getElementById(inputId).disabled = !this.checked;
+                updatePreview();
+            });
+        });
+
+        // 監聽所有數值輸入
+        document.querySelectorAll('input[type="number"]').forEach(input => {
+            input.addEventListener('change', updatePreview);
+            input.addEventListener('input', updatePreview);
+        });
+
+        // 檔案導入
+        document.getElementById('fileInput').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            const reader = new FileReader();
+            
+            reader.onload = function(e) {
+                originalContent = e.target.result;
+                document.getElementById('preview').textContent = originalContent;
+
+                // 解析特殊功能
+                const downforceMatch = originalContent.match(/fDownforceModifier value="([\d.]+)"/);
+                if (downforceMatch) {
+                    document.getElementById('enableDownforce').checked = true;
+                    document.getElementById('downforceValue').value = downforceMatch[1];
+                    document.getElementById('downforceValue').disabled = false;
+                }
+
+                const rocketBoostMatch = originalContent.match(/fRocketBoostCapacity value="([\d.]+)"/);
+                if (rocketBoostMatch) {
+                    document.getElementById('enableRocketBoost').checked = true;
+                    document.getElementById('rocketBoostCapacity').value = rocketBoostMatch[1];
+                    document.getElementById('rocketBoostCapacity').disabled = false;
+                }
+
+                const boostSpeedMatch = originalContent.match(/fBoostMaxSpeed value="([\d.]+)"/);
+                if (boostSpeedMatch) {
+                    document.getElementById('enableBoostSpeed').checked = true;
+                    document.getElementById('boostMaxSpeed').value = boostSpeedMatch[1];
+                    document.getElementById('boostMaxSpeed').disabled = false;
+                }
+
+                // 解析其他參數
+                Object.keys(defaultValues).forEach(param => {
+                    const match = originalContent.match(new RegExp(`${param} value="([\\d.-]+)"`));
+                    if (match) {
+                        document.getElementById(param).value = match[1];
+                    }
+                });
+
+                updatePreview();
+            };
+            
+            reader.readAsText(file);
+        });
+
+        // 檔案導出
+        function exportFile() {
+            const content = document.getElementById('preview').textContent;
+            const blob = new Blob([content], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'handling.meta';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        // 初始化
+        updatePreview();
+    </script>
+</body>
+</html>
